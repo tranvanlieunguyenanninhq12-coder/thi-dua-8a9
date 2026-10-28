@@ -1,0 +1,183 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
+import { Award, LogOut, ExternalLink, ImageIcon } from 'lucide-react'
+
+export default function StudentDashboard() {
+  const TEN_LOP_CO_DINH = '8A9' // Khóa cứng lớp 8A9
+
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [weeks, setWeeks] = useState<any[]>([])
+  const [selectedWeek, setSelectedWeek] = useState<string>('')
+  
+  // Tách riêng danh sách học sinh và danh sách điểm (giống Admin)
+  const [studentsList, setStudentsList] = useState<any[]>([])
+  const [scoresList, setScoresList] = useState<any[]>([])
+  
+  const [teamImages, setTeamImages] = useState<{ [key: number]: string }>({})
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('currentUser')
+    if (!userStr) {
+      router.push('/login')
+      return
+    }
+    const user = JSON.parse(userStr)
+    setCurrentUser(user)
+    fetchInitialData()
+  }, [])
+
+  const fetchInitialData = async () => {
+    // 1. Lấy đúng danh sách học sinh của lớp 8A9 và sắp xếp theo tên
+    const { data: students } = await supabase.from('students').select('*').eq('class_name', TEN_LOP_CO_DINH).order('full_name', { ascending: true })
+    if (students) setStudentsList(students)
+
+    // 2. Lấy danh sách tuần
+    const { data: weeksData } = await supabase.from('weeks').select('*')
+    if (weeksData && weeksData.length > 0) {
+      setWeeks(weeksData)
+      setSelectedWeek(weeksData[0].id)
+      fetchDataForWeek(weeksData[0].id)
+    }
+  }
+
+  const fetchDataForWeek = async (weekId: string) => {
+    // Chỉ lấy bảng điểm đơn thuần của tuần đó
+    const { data: allScores } = await supabase.from('emulation_scores').select('*').eq('week_id', weekId)
+    if (allScores) setScoresList(allScores)
+
+    const { data: imgData } = await supabase.from('team_weekly_images').select('*').eq('week_id', weekId)
+    if (imgData) {
+      const imgMap: any = {}
+      imgData.forEach((item: any) => { imgMap[item.team_number] = item.image_url })
+      setTeamImages(imgMap)
+    } else {
+      setTeamImages({})
+    }
+  }
+
+  const handleWeekChange = (weekId: string) => {
+    setSelectedWeek(weekId)
+    fetchDataForWeek(weekId)
+  }
+return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-white border-b border-purple-100 px-6 py-4 flex justify-between items-center shadow-xs">
+        <div className="flex items-center space-x-3">
+          <div className="bg-purple-600 text-white p-2.5 rounded-2xl shadow-md">
+            <Award className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-gray-900">Không Gian Học Sinh</h1>
+            <p className="text-xs text-purple-600 font-bold">Lớp: {TEN_LOP_CO_DINH} — Xin chào, {currentUser?.full_name} (Chỉ xem)</p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-3">
+          <a
+            href="https://thiduanamhoc2627.netlify.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center space-x-1.5 bg-indigo-50 text-indigo-700 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-indigo-100 transition shadow-sm"
+          >
+            <span>Tra cứu Sao Đỏ</span>
+            <ExternalLink className="h-4 w-4" />
+          </a>
+          <button
+            onClick={() => { localStorage.removeItem('currentUser'); router.push('/login'); }}
+            className="flex items-center space-x-2 bg-red-50 text-red-600 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer hover:bg-red-100 transition shadow-sm"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Đăng xuất</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-5xl w-full mx-auto p-6 space-y-6">
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 flex items-center space-x-4">
+          <span className="text-xs font-extrabold text-gray-700">Chọn Tuần Xem:</span>
+          <select
+            value={selectedWeek}
+            onChange={(e) => handleWeekChange(e.target.value)}
+            className="px-4 py-3 bg-purple-50 border border-purple-200 rounded-2xl font-bold text-purple-900 text-xs cursor-pointer outline-none focus:ring-2 focus:ring-purple-500/30 transition shadow-sm"
+          >
+            {weeks.map((w) => (
+              <option key={w.id} value={w.id}>{w.week_name} ({w.period})</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Khung hiển thị 4 ảnh minh chứng của 4 tổ */}
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 space-y-5">
+          <h3 className="text-base font-extrabold text-gray-900">Ảnh Minh Chứng Vi Phạm Của Các Tổ Trong Tuần</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((tNum) => (
+              <div key={tNum} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col items-center justify-between space-y-4 hover:shadow-md transition">
+                <span className="text-xs font-black text-purple-900 uppercase bg-purple-100 px-3 py-1 rounded-lg">Tổ {tNum}</span>
+                {teamImages[tNum] ? (
+                  <a
+                    href={teamImages[tNum]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-2.5 rounded-xl text-xs flex items-center justify-center space-x-1.5 transition shadow-lg transform hover:-translate-y-0.5"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    <span>Xem ảnh chi tiết</span>
+                  </a>
+                ) : (
+                  <span className="text-xs text-gray-400 italic font-medium py-2">Không có vi phạm</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="p-6 md:p-8 pb-4 border-b border-gray-100">
+            <h3 className="text-base font-extrabold text-gray-900">Bảng Điểm Thi Đua Của Lớp</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-purple-50/80 text-purple-900 text-xs font-extrabold">
+                  <th className="p-4 pl-6 md:pl-8">STT</th>
+                  <th className="p-4">Họ và Tên</th>
+                  <th className="p-4">Tổ</th>
+                  <th className="p-4">Tổng Điểm</th>
+                  <th className="p-4 pr-6 md:pr-8">Xếp Loại</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-xs font-medium text-gray-700">
+                {studentsList.map((st, index) => {
+                  // Lấy điểm của học sinh tương ứng với tuần được chọn (nếu không có thì mặc định 100đ loại T)
+                  const sc = scoresList.find(s => s.student_id === st.id) || { score: 100, evaluation: 'T' }
+                  
+                  return (
+                    <tr key={st.id} className="hover:bg-gray-50/50 transition-colors">
+                      <td className="p-4 pl-6 md:pl-8 font-bold">{index + 1}</td>
+                      <td className="p-4 font-bold text-gray-900">{st.full_name}</td>
+                      <td className="p-4">Tổ {st.team_number}</td>
+                      <td className="p-4 font-extrabold text-purple-700 text-sm">{sc.score}</td>
+                      <td className="p-4 pr-6 md:pr-8 font-extrabold">
+                        <span className={`px-3 py-1.5 rounded-xl text-[11px] shadow-sm ${
+                          sc.evaluation === 'T' ? 'bg-green-100 text-green-700' :
+                          sc.evaluation === 'K' ? 'bg-blue-100 text-blue-700' :
+                          sc.evaluation === 'TB' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                        }`}>
+                          {sc.evaluation}
+                        </span>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}

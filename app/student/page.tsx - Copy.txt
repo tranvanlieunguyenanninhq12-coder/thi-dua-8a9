@@ -1,0 +1,165 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
+import { Award, LogOut, ExternalLink, ImageIcon } from 'lucide-react'
+
+export default function StudentDashboard() {
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [weeks, setWeeks] = useState<any[]>([])
+  const [selectedWeek, setSelectedWeek] = useState<string>('')
+  const [scores, setScores] = useState<any[]>([])
+  const [teamImages, setTeamImages] = useState<{ [key: number]: string }>({})
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('currentUser')
+    if (!userStr) {
+      router.push('/login')
+      return
+    }
+    const user = JSON.parse(userStr)
+    setCurrentUser(user)
+    fetchInitialData()
+  }, [])
+
+  const fetchInitialData = async () => {
+    const { data: weeksData } = await supabase.from('weeks').select('*')
+    if (weeksData && weeksData.length > 0) {
+      setWeeks(weeksData)
+      setSelectedWeek(weeksData[0].id)
+      fetchDataForWeek(weeksData[0].id)
+    }
+  }
+
+  const fetchDataForWeek = async (weekId: string) => {
+    const { data: scoresData } = await supabase.from('emulation_scores').select('*, students(full_name, team_number)').eq('week_id', weekId)
+    if (scoresData) setScores(scoresData)
+
+    const { data: imgData } = await supabase.from('team_weekly_images').select('*').eq('week_id', weekId)
+    if (imgData) {
+      const imgMap: any = {}
+      imgData.forEach((item: any) => { imgMap[item.team_number] = item.image_url })
+      setTeamImages(imgMap)
+    } else {
+      setTeamImages({})
+    }
+  }
+
+  const handleWeekChange = (weekId: string) => {
+    setSelectedWeek(weekId)
+    fetchDataForWeek(weekId)
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-white border-b border-purple-100 px-6 py-4 flex justify-between items-center shadow-xs">
+        <div className="flex items-center space-x-3">
+          <div className="bg-purple-600 text-white p-2.5 rounded-2xl">
+            <Award className="h-6 w-6" />
+          </div>
+          <div>
+            <h1 className="text-lg font-black text-gray-900">Không Gian Học Sinh</h1>
+            <p className="text-xs text-purple-600 font-bold">Xin chào, {currentUser?.full_name} (Chỉ xem)</p>
+          </div>
+        </div>
+        <div className="flex items-center space-x-3">
+          <a
+            href="https://thiduanamhoc2627.netlify.app/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center space-x-1 bg-indigo-50 text-indigo-700 px-4 py-2 rounded-xl text-xs font-bold hover:bg-indigo-100 transition"
+          >
+            <span>Tra cứu Sao Đỏ</span>
+            <ExternalLink className="h-3.5 w-3.5" />
+          </a>
+          <button
+            onClick={() => { localStorage.removeItem('currentUser'); router.push('/login'); }}
+            className="flex items-center space-x-2 bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer"
+          >
+            <LogOut className="h-4 w-4" />
+            <span>Đăng xuất</span>
+          </button>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-5xl w-full mx-auto p-6 space-y-6">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex items-center space-x-4">
+          <span className="text-xs font-extrabold text-gray-700">Chọn Tuần Xem:</span>
+          <select
+            value={selectedWeek}
+            onChange={(e) => handleWeekChange(e.target.value)}
+            className="px-4 py-2.5 bg-purple-50 border border-purple-200 rounded-xl font-bold text-purple-900 text-xs cursor-pointer outline-none"
+          >
+            {weeks.map((w) => (
+              <option key={w.id} value={w.id}>{w.week_name} ({w.period})</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Khung hiển thị 4 ảnh minh chứng của 4 tổ để học sinh click xem chi tiết */}
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+          <h3 className="text-base font-extrabold text-gray-900">Ảnh Minh Chứng Vi Phạm Của Các Tổ Trong Tuần</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map((tNum) => (
+              <div key={tNum} className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col items-center justify-between space-y-3">
+                <span className="text-xs font-black text-purple-900 uppercase">Tổ {tNum}</span>
+                {teamImages[tNum] ? (
+                  <a
+                    href={teamImages[tNum]}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 rounded-xl text-xs flex items-center justify-center space-x-1 transition shadow"
+                  >
+                    <ImageIcon className="h-4 w-4" />
+                    <span>Xem ảnh chi tiết</span>
+                  </a>
+                ) : (
+                  <span className="text-xs text-gray-400 italic">Không có vi phạm</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <h3 className="text-base font-extrabold text-gray-900">Bảng Điểm Thi Đua Của Lớp</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-purple-50 text-purple-900 text-xs font-extrabold">
+                  <th className="p-4">STT</th>
+                  <th className="p-4">Họ và Tên</th>
+                  <th className="p-4">Tổ</th>
+                  <th className="p-4">Tổng Điểm</th>
+                  <th className="p-4">Xếp Loại</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 text-xs font-medium text-gray-700">
+                {scores.map((sc, index) => (
+                  <tr key={sc.id} className="hover:bg-gray-50/50">
+                    <td className="p-4">{index + 1}</td>
+                    <td className="p-4 font-bold text-gray-900">{sc.students?.full_name}</td>
+                    <td className="p-4">Tổ {sc.students?.team_number}</td>
+                    <td className="p-4 font-bold">{sc.score}</td>
+                    <td className="p-4 font-extrabold">
+                      <span className={`px-2.5 py-1 rounded-lg text-xs ${
+                        sc.evaluation === 'T' ? 'bg-green-100 text-green-700' :
+                        sc.evaluation === 'K' ? 'bg-blue-100 text-blue-700' :
+                        sc.evaluation === 'TB' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        {sc.evaluation}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+  )
+}

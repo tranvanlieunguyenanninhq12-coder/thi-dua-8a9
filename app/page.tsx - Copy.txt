@@ -1,0 +1,90 @@
+'use client'
+
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { Award, LogIn, Sparkles, BookOpen, Users, CheckCircle2 } from 'lucide-react'
+
+export default function HomePage() {
+  const [selectedClass, setSelectedClass] = useState('8A1')
+  const router = useRouter()
+
+  // Danh sách lớp từ 8A1 đến 8A20
+  const classesList = Array.from({ length: 20 }, (_, i) => `8A${i + 1}`)
+
+  const handleEnterClass = () => {
+    // Lưu lớp được chọn vào localStorage để các trang con nhận diện
+    localStorage.setItem('currentClass', selectedClass)
+    router.push('/login')
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex flex-col justify-between p-6">
+      {/* Header */}
+      <div className="max-w-6xl mx-auto w-full flex justify-between items-center py-4">
+        <div className="flex items-center space-x-2 bg-white/80 backdrop-blur px-4 py-2 rounded-2xl shadow-sm border border-purple-100">
+          <Award className="h-6 w-6 text-purple-600 animate-bounce" />
+          <span className="font-extrabold text-purple-900 tracking-wide text-sm md:text-base">THI ĐUA LỚP HỌC TÍCH CỰC</span>
+        </div>
+        <button
+          onClick={() => router.push('/login')}
+          className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-2xl shadow-md transition font-bold text-sm cursor-pointer"
+        >
+          <LogIn className="h-4 w-4" />
+          <span>Đăng nhập hệ thống</span>
+        </button>
+      </div>
+
+      {/* Main Banner */}
+      <div className="max-w-4xl mx-auto w-full bg-white/90 backdrop-blur-md rounded-3xl shadow-xl border border-purple-100 p-8 md:p-12 text-center space-y-6 my-auto">
+        <div className="inline-flex items-center space-x-1.5 bg-purple-100 text-purple-700 px-4 py-1.5 rounded-full text-xs font-bold shadow-xs">
+          <Sparkles className="h-4 w-4" />
+          <span>NĂM HỌC 2026 - 2027</span>
+        </div>
+
+        <div className="space-y-2">
+          <h1 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight">
+            QUẢN LÝ THI ĐUA HỌC SINH
+          </h1>
+          <p className="text-lg md:text-xl font-bold text-purple-700">
+            GIÁO VIÊN CHỦ NHIỆM: TRẦN VĂN LIỆU
+          </p>
+        </div>
+
+        <p className="text-gray-600 text-sm md:text-base max-w-xl mx-auto">
+          Hệ thống theo dõi nề nếp, chấm điểm thi đua các tổ, tổng hợp xếp loại hạnh kiểm tuần và đợt cực kỳ minh bạch, trực quan.
+        </p>
+
+        {/* Khung chọn lớp */}
+        <div className="pt-4 flex flex-col md:flex-row items-center justify-center gap-4 max-w-md mx-auto">
+          <div className="w-full flex items-center space-x-2 bg-purple-50/80 p-2 rounded-2xl border border-purple-200">
+            <Users className="h-5 w-5 text-purple-600 ml-2" />
+            <select
+              value={selectedClass}
+              onChange={(e) => setSelectedClass(e.target.value)}
+              className="w-full bg-transparent px-2 py-2 font-bold text-purple-900 outline-none text-base cursor-pointer"
+            >
+              {classesList.map((cls) => (
+                <option key={cls} value={cls}>
+                  Lớp {cls}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <button
+            onClick={handleEnterClass}
+            className="w-full md:w-auto whitespace-nowrap bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold px-8 py-3.5 rounded-2xl shadow-lg transition transform hover:-translate-y-0.5 cursor-pointer flex items-center justify-center space-x-2"
+          >
+            <CheckCircle2 className="h-5 w-5" />
+            <span>Vào Không Gian Lớp</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="text-center text-xs text-gray-500 py-4 font-medium">
+        © 2026 Hệ thống Thi đua Học sinh - Giáo viên Trần Văn Liệu. All rights reserved.
+      </div>
+    </div>
+  )
+}

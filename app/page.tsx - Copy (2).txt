@@ -1,0 +1,79 @@
+'use client'
+
+import { useRouter } from 'next/navigation'
+import { Award, LogIn, Sparkles, CheckCircle2 } from 'lucide-react'
+
+export default function HomePage() {
+  const router = useRouter()
+  
+  // Khai báo cố định duy nhất một lớp
+  const TEN_LOP_CO_DINH = '8A9'
+
+  const handleEnterClass = () => {
+    // Đồng bộ cứng dữ liệu Lớp 8A9 vào hệ thống khi click
+    localStorage.setItem('adminSelectedClass', TEN_LOP_CO_DINH)
+    localStorage.setItem('selectedClass', TEN_LOP_CO_DINH)
+    localStorage.setItem('currentClass', TEN_LOP_CO_DINH)
+    router.push('/login')
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 flex flex-col justify-between p-6">
+      {/* Header */}
+      <div className="max-w-6xl mx-auto w-full flex justify-between items-center py-4">
+        <div className="flex items-center space-x-2 bg-white/80 backdrop-blur px-4 py-2 rounded-2xl shadow-sm border border-purple-100">
+          <Award className="h-6 w-6 text-purple-600 animate-bounce" />
+          <span className="font-extrabold text-purple-900 tracking-wide text-sm md:text-base">THI ĐUA LỚP HỌC TÍCH CỰC</span>
+        </div>
+        <button
+          onClick={() => router.push('/login')}
+          className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-2xl shadow-md transition font-bold text-sm cursor-pointer"
+        >
+          <LogIn className="h-4 w-4" />
+          <span>Đăng nhập hệ thống</span>
+        </button>
+      </div>
+
+      {/* Main Banner */}
+      <div className="max-w-4xl mx-auto w-full bg-white/90 backdrop-blur-md rounded-3xl shadow-xl border border-purple-100 p-8 md:p-12 text-center space-y-6 my-auto">
+        <div className="inline-flex items-center space-x-1.5 bg-purple-100 text-purple-700 px-4 py-1.5 rounded-full text-xs font-bold shadow-xs">
+          <Sparkles className="h-4 w-4" />
+          <span>NĂM HỌC 2026 - 2027</span>
+        </div>
+
+        <div className="space-y-2">
+          <h1 className="text-3xl md:text-5xl font-black text-gray-900 tracking-tight">
+            QUẢN LÝ THI ĐUA HỌC SINH
+            <br />
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-purple-600 to-indigo-600 mt-2 inline-block">
+              LỚP {TEN_LOP_CO_DINH}
+            </span>
+          </h1>
+          <p className="text-lg md:text-xl font-bold text-purple-700">
+            GIÁO VIÊN CHỦ NHIỆM: TRẦN VĂN LIỆU
+          </p>
+        </div>
+
+        <p className="text-gray-600 text-sm md:text-base max-w-xl mx-auto">
+          Hệ thống theo dõi nề nếp, chấm điểm thi đua các tổ, tổng hợp xếp loại hạnh kiểm tuần và đợt cực kỳ minh bạch, trực quan.
+        </p>
+
+        {/* Nút vào lớp cố định */}
+        <div className="pt-6 flex flex-col items-center justify-center max-w-sm mx-auto">
+          <button
+            onClick={handleEnterClass}
+            className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold px-8 py-4 rounded-2xl shadow-lg transition transform hover:-translate-y-0.5 cursor-pointer flex items-center justify-center space-x-2 text-lg"
+          >
+            <CheckCircle2 className="h-6 w-6" />
+            <span>Vào Không Gian Lớp {TEN_LOP_CO_DINH}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="text-center text-xs text-gray-500 py-4 font-medium">
+        © 2026 Lớp {TEN_LOP_CO_DINH} - Giáo viên Trần Văn Liệu. All rights reserved.
+      </div>
+    </div>
+  )
+}

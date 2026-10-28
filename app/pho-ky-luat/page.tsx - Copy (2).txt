@@ -1,0 +1,159 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
+import { ShieldCheck, LogOut, Upload, ImageIcon, Plus, Trash2 } from 'lucide-react'
+
+export default function PhoKyLuatDashboard() {
+  const TEN_LOP_CO_DINH = '8A9' // Khóa cứng hiển thị tên lớp trên Header
+
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [records, setRecords] = useState<any[]>([])
+  const [content, setContent] = useState('')
+  const [teacherName, setTeacherName] = useState('')
+  const [imageUrl, setImageUrl] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [rotation, setRotation] = useState(0)
+
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('currentUser')
+    if (!userStr) { router.push('/login'); return; }
+    const user = JSON.parse(userStr)
+    if (user.role !== 'pho_ky_luat') { router.push('/login'); return; }
+    setCurrentUser(user)
+    fetchRecords()
+  }, [])
+
+  const fetchRecords = async () => {
+    const { data } = await supabase.from('disciplinary_records').select('*').order('created_at', { ascending: false })
+    if (data) setRecords(data)
+  }
+
+  const compressImage = (file: File): Promise<Blob> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      reader.onload = (event) => {
+        const img = new Image()
+        img.src = event.target?.result as string
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          let width = img.width; let height = img.height; const maxDimension = 1200
+          if (width > height && width > maxDimension) { height = (height * maxDimension) / width; width = maxDimension } 
+          else if (height > maxDimension) { width = (width * maxDimension) / height; height = maxDimension }
+          canvas.width = width; canvas.height = height; const ctx = canvas.getContext('2d')
+          ctx?.drawImage(img, 0, 0, width, height)
+          canvas.toBlob((blob) => { if (blob) resolve(blob); else reject(new Error('Lỗi nén ảnh')) }, 'image/jpeg', 0.8)
+        }
+      }
+      reader.onerror = (error) => reject(error)
+    })
+  }
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploading(true)
+    try {
+      const compressedBlob = await compressImage(file)
+      const fileName = `kl_${Date.now()}.jpg`
+      const { error } = await supabase.storage.from('thi-dua').upload(fileName, compressedBlob, { contentType: 'image/jpeg' })
+      if (error) throw error
+      const { data: publicUrlData } = supabase.storage.from('thi-dua').getPublicUrl(fileName)
+      setImageUrl(publicUrlData.publicUrl)
+      alert('Tải và nén ảnh sổ kỷ luật thành công!')
+    } catch (err: any) { alert('Lỗi tải ảnh: ' + err.message) } 
+    finally { setUploading(false) }
+  }
+
+  const handleAddRecord = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!content.trim()) return
+    setLoading(true)
+    const { error } = await supabase.from('disciplinary_records').insert([
+      { content, teacher_name: teacherName, image_url: imageUrl, creator_name: currentUser.full_name }
+    ])
+    if (error) { alert('Lỗi khi ghi nhận kỷ luật!') } 
+    else { alert('Đã ghi nhận và tải ảnh thành công!'); setContent(''); setTeacherName(''); setImageUrl(''); fetchRecords(); }
+    setLoading(false)
+  }
+
+  const handleDeleteRecord = async (id: string) => {
+    if (confirm('Thầy/Cô có chắc chắn muốn thu hồi/xóa bản ghi kỷ luật này không?')) {
+      await supabase.from('disciplinary_records').delete().eq('id', id)
+      fetchRecords()
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-white border-b border-purple-100 px-6 py-4 flex justify-between items-center shadow-xs">
+        <div className="flex items-center space-x-3">
+          <div className="bg-purple-600 text-white p-2.5 rounded-2xl shadow-md"><ShieldCheck className="h-6 w-6" /></div>
+          <div><h1 className="text-lg font-black text-gray-900">Khu Vực Phó Kỷ Luật - {TEN_LOP_CO_DINH}</h1><p className="text-xs text-purple-600 font-bold">Xin chào, {currentUser?.full_name}</p></div>
+        </div>
+        <button onClick={() => { localStorage.removeItem('currentUser'); router.push('/login'); }} className="flex items-center space-x-2 bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2.5 rounded-xl text-xs font-bold cursor-pointer transition shadow-sm"><LogOut className="h-4 w-4" /><span>Đăng xuất</span></button>
+      </header>
+
+      <main className="flex-1 max-w-4xl w-full mx-auto p-6 space-y-6">
+        <div className="bg-white p-6 md:p-8 rounded-3xl shadow-sm border border-gray-100 space-y-5">
+          <h3 className="text-base font-extrabold text-gray-900">Đăng Sổ Kỷ Luật Giáo Viên Bộ Môn</h3>
+          <form onSubmit={handleAddRecord} className="space-y-5">
+            <textarea placeholder="Nội dung vi phạm của học sinh ghi nhận từ giáo viên bộ môn..." value={content} onChange={(e) => setContent(e.target.value)} required className="w-full p-4 bg-gray-50 border border-gray-200 rounded-2xl text-sm font-medium outline-none focus:ring-2 focus:ring-purple-500/30 transition shadow-inner" rows={3} />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input type="text" placeholder="Tên giáo viên bộ môn ghi nhận" value={teacherName} onChange={(e) => setTeacherName(e.target.value)} className="px-4 py-3.5 bg-gray-50 border border-gray-200 rounded-2xl text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500/30 transition shadow-inner" />
+              <div className="flex items-center space-x-2">
+                <label className="flex-1 flex items-center justify-center space-x-2 bg-purple-50 hover:bg-purple-100 text-purple-700 px-4 py-3.5 rounded-2xl border border-purple-200 cursor-pointer font-bold text-xs transition shadow-sm">
+                  <Upload className="h-4 w-4" /><span>{uploading ? 'Đang nén...' : imageUrl ? '✓ Đã có ảnh (Đổi)' : 'Tải ảnh sổ kỷ luật'}</span><input type="file" accept="image/*" onChange={handleImageUpload} disabled={uploading} className="hidden" />
+                </label>
+                {imageUrl && (<button type="button" onClick={() => setImageUrl('')} className="bg-red-50 text-red-600 p-3.5 rounded-2xl text-xs font-bold hover:bg-red-100 transition shadow-sm"><Trash2 className="h-4 w-4 mx-auto"/></button>)}
+              </div>
+            </div>
+            <button type="submit" disabled={loading || uploading} className="w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold py-3.5 rounded-2xl shadow-lg transition transform hover:-translate-y-0.5 cursor-pointer flex items-center justify-center space-x-2 text-sm"><Plus className="h-5 w-5" /><span>{loading ? 'Đang xử lý...' : 'Lưu bản ghi kỷ luật'}</span></button>
+          </form>
+        </div>
+
+        <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-6 md:p-8 space-y-4">
+          <h3 className="text-base font-extrabold text-gray-900 mb-2">Danh Sách Sổ Kỷ Luật Đã Ghi Nhận</h3>
+          <div className="space-y-3">
+            {records.map((r) => (
+              <div key={r.id} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 hover:shadow-sm transition">
+                <div className="space-y-1.5"><p className="text-sm font-bold text-gray-900">{r.content}</p><p className="text-[11px] text-gray-500 font-medium">Giáo viên: <b className="text-gray-700">{r.teacher_name || 'Không rõ'}</b> | Người đăng: {r.creator_name || 'PKL'}</p></div>
+                <div className="flex items-center space-x-3 w-full md:w-auto justify-end">
+                  {r.image_url && (<button onClick={() => { setZoom(1); setRotation(0); setPreviewImage(r.image_url); }} className="text-purple-600 font-bold flex items-center space-x-1 text-xs bg-purple-50 px-4 py-2.5 rounded-xl hover:bg-purple-100 transition cursor-pointer shadow-sm"><ImageIcon className="h-4 w-4" /><span>Xem ảnh</span></button>)}
+                  <button onClick={() => handleDeleteRecord(r.id)} className="bg-red-50 hover:bg-red-100 text-red-600 p-2.5 rounded-xl transition cursor-pointer shadow-sm" title="Thu hồi/Xóa"><Trash2 className="h-4 w-4" /></button>
+                </div>
+              </div>
+            ))}
+            {records.length === 0 && (
+              <div className="text-center py-10 border border-dashed border-gray-300 rounded-2xl">
+                <p className="text-xs font-bold text-gray-500">Chưa có bản ghi kỷ luật nào.</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </main>
+
+      {previewImage && (
+        <div className="fixed inset-0 bg-black/90 z-50 flex flex-col items-center justify-center p-4 backdrop-blur-sm">
+          <div className="absolute top-6 right-6 flex space-x-3 bg-gray-900/50 p-2 rounded-2xl backdrop-blur-md">
+            <button onClick={() => setZoom(z => z + 0.2)} className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition">Phóng to (+)</button>
+            <button onClick={() => setZoom(z => Math.max(0.4, z - 0.2))} className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition">Thu nhỏ (-)</button>
+            <button onClick={() => setRotation(r => (r + 90) % 360)} className="bg-white/10 hover:bg-white/20 text-white px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition">Xoay 90°</button>
+            <button onClick={() => setPreviewImage(null)} className="bg-red-500 hover:bg-red-600 text-white px-6 py-2 rounded-xl text-xs font-extrabold cursor-pointer transition shadow-lg">Đóng (X)</button>
+          </div>
+          <div className="overflow-auto max-w-full max-h-[85vh] flex items-center justify-center p-2 mt-12">
+            <img src={previewImage} alt="Kỷ luật" style={{ transform: `scale(${zoom}) rotate(${rotation}deg)`, transition: 'transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)' }} className="max-h-[75vh] object-contain rounded-xl shadow-2xl ring-4 ring-white/10" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}

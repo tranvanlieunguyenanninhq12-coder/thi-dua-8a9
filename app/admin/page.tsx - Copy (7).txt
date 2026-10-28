@@ -1,0 +1,411 @@
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
+import { createClient } from '@/utils/supabase/client'
+import { 
+  ShieldAlert, Users, Calendar, Award, BarChart3, Settings, 
+  LogOut, Plus, Trash2, FileSpreadsheet, ExternalLink, ImageIcon, BookOpen, Home 
+} from 'lucide-react'
+
+export default function AdminDashboard() {
+  const [currentTab, setCurrentTab] = useState('home')
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  
+  const [usersList, setUsersList] = useState<any[]>([])
+  const [newUsername, setNewUsername] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [newFullName, setNewFullName] = useState('')
+  const [newRole, setNewRole] = useState('to_truong_1')
+
+  const [selectedClass, setSelectedClass] = useState('8A1')
+  const [studentsList, setStudentsList] = useState<any[]>([])
+  const [newStudentName, setNewStudentName] = useState('')
+  const [newStudentCode, setNewStudentCode] = useState('')
+  const [newStudentTeam, setNewStudentTeam] = useState(1)
+
+  const [weeksList, setWeeksList] = useState<any[]>([])
+  const [selectedWeek, setSelectedWeek] = useState('')
+  const [scoresList, setScoresList] = useState<any[]>([])
+  const [teamImages, setTeamImages] = useState<{ [key: number]: string }>({})
+  const [newWeekName, setNewWeekName] = useState('')
+  const [newWeekSemester, setNewWeekSemester] = useState('HK1')
+  const [newWeekPeriod, setNewWeekPeriod] = useState('GIỮA HỌC KỲ 1')
+
+  const [selectedPeriod, setSelectedPeriod] = useState('GIỮA HỌC KỲ 1')
+  const [disciplinaryList, setDisciplinaryList] = useState<any[]>([])
+  const [resetPasswordInput, setResetPasswordInput] = useState('')
+
+  const [previewImage, setPreviewImage] = useState<string | null>(null)
+  const [zoom, setZoom] = useState(1)
+  const [rotation, setRotation] = useState(0)
+
+  const router = useRouter()
+  const supabase = createClient()
+
+  useEffect(() => {
+    const userStr = localStorage.getItem('currentUser')
+    if (!userStr) { router.push('/login'); return; }
+    const user = JSON.parse(userStr)
+    if (user.role !== 'admin') { router.push('/login'); return; }
+    setCurrentUser(user)
+
+    const savedClass = localStorage.getItem('adminSelectedClass') || localStorage.getItem('selectedClass') || localStorage.getItem('currentClass') || '8A1'
+    setSelectedClass(savedClass)
+    fetchAllData(savedClass)
+  }, [selectedWeek])
+
+  const fetchAllData = async (className?: string) => {
+    setLoading(true)
+    const clsToFetch = className || selectedClass
+
+    const { data: users } = await supabase.from('users').select('*')
+    if (users) setUsersList(users)
+
+    const { data: students } = await supabase.from('students').select('*').eq('class_name', clsToFetch).order('full_name', { ascending: true })
+    if (students) setStudentsList(students)
+
+    const { data: weeks } = await supabase.from('weeks').select('*')
+    if (weeks) {
+      setWeeksList(weeks)
+      if (weeks.length > 0 && !selectedWeek) setSelectedWeek(weeks[0].id)
+    }
+
+    const { data: allScores } = await supabase.from('emulation_scores').select('*')
+    if (allScores) setScoresList(allScores)
+
+    if (selectedWeek) {
+      const { data: imgData } = await supabase.from('team_weekly_images').select('*').eq('week_id', selectedWeek)
+      if (imgData) {
+        const imgMap: any = {}
+        imgData.forEach((item: any) => { imgMap[item.team_number] = item.image_url })
+        setTeamImages(imgMap)
+      } else { setTeamImages({}) }
+    }
+
+    const { data: disc } = await supabase.from('disciplinary_records').select('*').order('created_at', { ascending: false })
+    if (disc) setDisciplinaryList(disc)
+
+    setLoading(false)
+  }
+
+  const handleLogout = () => { localStorage.removeItem('currentUser'); router.push('/login'); }
+
+  const handleAddUser = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const { error } = await supabase.from('users').insert([{
+      username: newUsername.trim().toUpperCase(), password: newPassword, full_name: newFullName, role: newRole,
+      team_number: newRole.startsWith('to_truong') ? parseInt(newRole.replace('to_truong_', '')) : 0
+    }])
+    if (error) alert('Lỗi: Trùng tên tài khoản!')
+    else { alert('Tạo thành công!'); setNewUsername(''); setNewPassword(''); setNewFullName(''); fetchAllData(); }
+  }
+
+  const handleDeleteUser = async (id: string) => {
+    if (confirm('Xóa tài khoản này?')) { await supabase.from('users').delete().eq('id', id); fetchAllData(); }
+  }
+
+  const handleAddStudent = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const { error } = await supabase.from('students').insert([{ student_code: newStudentCode, full_name: newStudentName, class_name: selectedClass, team_number: newStudentTeam }])
+    if (error) alert('Lỗi thêm học sinh!'); else { alert('Thêm thành công!'); setNewStudentName(''); setNewStudentCode(''); fetchAllData(); }
+  }
+
+  const handleDeleteStudent = async (id: string) => {
+    if (confirm('Xóa học sinh này?')) { await supabase.from('students').delete().eq('id', id); fetchAllData(); }
+  }
+
+  const handleAddWeek = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const { error } = await supabase.from('weeks').insert([{ week_name: newWeekName, semester: newWeekSemester, period: newWeekPeriod }])
+    if (error) alert('Lỗi thêm tuần!'); else { alert('Thêm tuần thành công!'); setNewWeekName(''); fetchAllData(); }
+  }
+
+  const getEvaluation = (score: number) => {
+    if (score < 50) return 'Y'; if (score <= 64) return 'TB'; if (score <= 79) return 'K'; return 'T';
+  }
+
+  const handleScoreUpdate = async (studentId: string, scoreVal: number) => {
+    const evalVal = getEvaluation(scoreVal)
+    const existing = scoresList.find(s => s.student_id === studentId && s.week_id === selectedWeek)
+    if (existing) {
+      await supabase.from('emulation_scores').update({ score: scoreVal, evaluation: evalVal }).eq('id', existing.id)
+    } else {
+      await supabase.from('emulation_scores').insert([{ student_id: studentId, week_id: selectedWeek, score: scoreVal, evaluation: evalVal }])
+    }
+    fetchAllData()
+  }
+
+  const handleDeleteTeamImage = async (teamNum: number) => {
+    if (!confirm(`Xóa ảnh tổ ${teamNum}?`)) return
+    await supabase.from('team_weekly_images').delete().eq('week_id', selectedWeek).eq('team_number', teamNum)
+    fetchAllData(); alert('Đã xóa ảnh!')
+  }
+
+  const handleDeleteDisciplinary = async (id: string) => {
+    if (!confirm('Xóa kỷ luật này?')) return
+    await supabase.from('disciplinary_records').delete().eq('id', id)
+    fetchAllData()
+  }
+
+  const exportToExcel = () => {
+    let csvContent = "data:text/csv;charset=utf-8,STT,Họ và Tên,Tổ,Tổng Điểm,Xếp Loại\n"
+    studentsList.forEach((st, idx) => {
+      const sc = scoresList.find(s => s.student_id === st.id && s.week_id === selectedWeek) || { score: 100, evaluation: 'T' }
+      csvContent += `${idx + 1},"${st.full_name}",Tổ ${st.team_number},${sc.score},${sc.evaluation}\n`
+    })
+    const link = document.createElement("a")
+    link.setAttribute("href", encodeURI(csvContent))
+    link.setAttribute("download", `bao_cao_${selectedClass}.csv`)
+    document.body.appendChild(link); link.click(); document.body.removeChild(link);
+  }
+
+  const handleResetSystem = async () => {
+    if (resetPasswordInput !== 'luuvanglien0410') { alert('Sai mật khẩu Admin!'); return; }
+    if (confirm('Xóa sạch dữ liệu cũ và mở khóa chọn lại lớp cho năm học mới?')) {
+      await supabase.from('emulation_scores').delete().neq('score', -999)
+      await supabase.from('disciplinary_records').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      await supabase.from('team_weekly_images').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      localStorage.removeItem('adminSelectedClass'); localStorage.removeItem('selectedClass'); localStorage.removeItem('currentClass');
+      alert('Đã làm mới hệ thống!'); setResetPasswordInput(''); router.push('/');
+    }
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      <header className="bg-white border-b border-purple-100 px-6 py-4 flex justify-between items-center">
+        <div className="flex items-center space-x-3">
+          <div className="bg-purple-600 text-white p-2.5 rounded-2xl"><ShieldAlert className="h-6 w-6" /></div>
+          <div><h1 className="text-lg font-black text-gray-900">Quản Trị Viên Hệ Thống Thi Đua</h1><p className="text-xs text-purple-600 font-bold">GVCN: TRẦN VĂN LIỆU</p></div>
+        </div>
+        <div className="flex items-center space-x-3">
+          {currentTab !== 'home' && (<button onClick={() => setCurrentTab('home')} className="bg-purple-50 text-purple-700 px-4 py-2 rounded-xl text-xs font-bold"><Home className="h-4 w-4 inline mr-1" />Trang chủ</button>)}
+          <div className="px-4 py-2 bg-purple-100 rounded-xl font-black text-purple-900 text-xs">Lớp cố định: {selectedClass}</div>
+          <button onClick={handleLogout} className="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold"><LogOut className="h-4 w-4 inline mr-1" />Đăng xuất</button>
+        </div>
+      </header>
+
+      <main className="flex-1 max-w-7xl w-full mx-auto p-6 space-y-6">
+        {currentTab === 'home' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-r from-purple-600 to-indigo-600 rounded-3xl p-8 text-white shadow-xl space-y-2">
+              <h2 className="text-2xl font-black">Bảng Điều Khiển Quản Trị</h2>
+              <p className="text-sm text-purple-100">Đang quản lý cố định cho <b>Lớp {selectedClass}</b>.</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {[
+                { id: 'accounts', title: 'Quản lý Tài khoản', icon: Users, desc: 'Thêm, sửa, xóa tài khoản.' },
+                { id: 'students', title: 'Danh sách Học sinh', icon: Users, desc: 'Cập nhật danh sách 4 tổ.' },
+                { id: 'weeks', title: 'Thời gian & Tuần', icon: Calendar, desc: 'Thêm tuần và đợt đánh giá.' },
+                { id: 'results', title: 'Kết quả Thi đua Tuần', icon: Award, desc: 'Chấm điểm và xem ảnh.' },
+                { id: 'periods', title: 'Thống kê theo Đợt', icon: BarChart3, desc: 'Tính điểm trung bình cộng.' },
+                { id: 'saodo', title: 'Tra cứu Sao Đỏ', icon: ExternalLink, desc: 'Liên kết tra cứu trường.' },
+                { id: 'teachers', title: 'Sổ kỷ luật GVBM', icon: BookOpen, desc: 'Xem vi phạm bộ môn.' },
+                { id: 'settings', title: 'Cài đặt Năm mới', icon: Settings, desc: 'Làm mới dữ liệu hệ thống.' },
+              ].map(c => {
+                const Icon = c.icon
+                return (
+                  <div key={c.id} onClick={() => setCurrentTab(c.id)} className="bg-white p-6 rounded-3xl shadow-sm border border-purple-100 hover:shadow-xl transition cursor-pointer flex flex-col justify-between space-y-4">
+                    <div className="bg-purple-50 text-purple-600 p-3 rounded-2xl w-fit"><Icon className="h-6 w-6" /></div>
+                    <div><h3 className="font-black text-gray-900">{c.title}</h3><p className="text-xs text-gray-500">{c.desc}</p></div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {currentTab === 'accounts' && (
+          <div className="space-y-6 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+            <h3 className="font-extrabold text-gray-900">Cấp tài khoản mới</h3>
+            <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-5 gap-4">
+              <input type="text" placeholder="Mã TK" value={newUsername} onChange={e => setNewUsername(e.target.value)} required className="px-4 py-2 bg-gray-50 border rounded-xl text-xs uppercase" />
+              <input type="text" placeholder="Mật khẩu" value={newPassword} onChange={e => setNewPassword(e.target.value)} required className="px-4 py-2 bg-gray-50 border rounded-xl text-xs" />
+              <input type="text" placeholder="Họ tên" value={newFullName} onChange={e => setNewFullName(e.target.value)} required className="px-4 py-2 bg-gray-50 border rounded-xl text-xs" />
+              <select value={newRole} onChange={e => setNewRole(e.target.value)} className="px-4 py-2 bg-gray-50 border rounded-xl text-xs"><option value="to_truong_1">Tổ trưởng 1</option><option value="to_truong_2">Tổ trưởng 2</option><option value="to_truong_3">Tổ trưởng 3</option><option value="to_truong_4">Tổ trưởng 4</option><option value="pho_ky_luat">Phó kỷ luật</option><option value="student">Học sinh</option></select>
+              <button type="submit" className="bg-purple-600 text-white font-bold px-6 py-2 rounded-xl text-xs">Tạo</button>
+            </form>
+            <table className="w-full text-left mt-4">
+              <thead><tr className="bg-purple-50 text-purple-900 text-xs font-bold"><th className="p-3">STT</th><th className="p-3">Mã TK</th><th className="p-3">Họ tên</th><th className="p-3">Quyền</th><th className="p-3 text-center">Xóa</th></tr></thead>
+              <tbody className="text-xs">
+                {usersList.map((u, i) => (
+                  <tr key={u.id} className="border-b"><td className="p-3">{i+1}</td><td className="p-3 font-bold text-purple-700">{u.username}</td><td className="p-3">{u.full_name}</td><td className="p-3 uppercase">{u.role}</td><td className="p-3 text-center">{u.username !== 'ADMIN' && (<button onClick={() => handleDeleteUser(u.id)} className="text-red-600"><Trash2 className="h-4 w-4" /></button>)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {currentTab === 'students' && (
+          <div className="space-y-6 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+            <h3 className="font-extrabold text-gray-900">Thêm học sinh lớp {selectedClass}</h3>
+            <form onSubmit={handleAddStudent} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <input type="text" placeholder="Mã HS" value={newStudentCode} onChange={e => setNewStudentCode(e.target.value)} required className="px-4 py-2 bg-gray-50 border rounded-xl text-xs" />
+              <input type="text" placeholder="Họ tên HS" value={newStudentName} onChange={e => setNewStudentName(e.target.value)} required className="px-4 py-2 bg-gray-50 border rounded-xl text-xs" />
+              <select value={newStudentTeam} onChange={e => setNewStudentTeam(parseInt(e.target.value))} className="px-4 py-2 bg-gray-50 border rounded-xl text-xs"><option value={1}>Tổ 1</option><option value={2}>Tổ 2</option><option value={3}>Tổ 3</option><option value={4}>Tổ 4</option></select>
+              <button type="submit" className="bg-purple-600 text-white font-bold px-6 py-2 rounded-xl text-xs">Thêm</button>
+            </form>
+            <table className="w-full text-left mt-4">
+              <thead><tr className="bg-purple-50 text-purple-900 text-xs font-bold"><th className="p-3">STT</th><th className="p-3">Mã HS</th><th className="p-3">Họ tên</th><th className="p-3">Tổ</th><th className="p-3 text-center">Xóa</th></tr></thead>
+              <tbody className="text-xs">
+                {studentsList.map((st, i) => (
+                  <tr key={st.id} className="border-b"><td className="p-3">{i+1}</td><td className="p-3 font-bold text-purple-700">{st.student_code}</td><td className="p-3 font-bold">{st.full_name}</td><td className="p-3">Tổ {st.team_number}</td><td className="p-3 text-center"><button onClick={() => handleDeleteStudent(st.id)} className="text-red-600"><Trash2 className="h-4 w-4" /></button></td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {currentTab === 'weeks' && (
+          <div className="space-y-6 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+            <h3 className="font-extrabold text-gray-900">Thêm Tuần & Thời Gian</h3>
+            <form onSubmit={handleAddWeek} className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <input type="text" placeholder="VD: Tuần 1 - 07/09/2026 - 12/09/2026" value={newWeekName} onChange={e => setNewWeekName(e.target.value)} required className="px-4 py-2 bg-gray-50 border rounded-xl text-xs" />
+              <select value={newWeekSemester} onChange={e => setNewWeekSemester(e.target.value)} className="px-4 py-2 bg-gray-50 border rounded-xl text-xs"><option value="HK1">HK1</option><option value="HK2">HK2</option></select>
+              <select value={newWeekPeriod} onChange={e => setNewWeekPeriod(e.target.value)} className="px-4 py-2 bg-gray-50 border rounded-xl text-xs"><option value="GIỮA HỌC KỲ 1">GIỮA HỌC KỲ 1</option><option value="HỌC KỲ 1">HỌC KỲ 1 (Cuối kỳ)</option><option value="GIỮA HỌC KỲ 2">GIỮA HỌC KỲ 2</option><option value="HỌC KỲ 2">HỌC KỲ 2 (Cuối kỳ)</option></select>
+              <button type="submit" className="bg-purple-600 text-white font-bold px-6 py-2 rounded-xl text-xs">Tạo tuần</button>
+            </form>
+            <table className="w-full text-left mt-4">
+              <thead><tr className="bg-purple-50 text-purple-900 text-xs font-bold"><th className="p-3">STT</th><th className="p-3">Tên Tuần</th><th className="p-3">Học Kỳ</th><th className="p-3">Đợt</th><th className="p-3 text-center">Xóa</th></tr></thead>
+              <tbody className="text-xs">
+                {weeksList.map((w, i) => (
+                  <tr key={w.id} className="border-b"><td className="p-3">{i+1}</td><td className="p-3 font-bold text-purple-700">{w.week_name}</td><td className="p-3">{w.semester}</td><td className="p-3 font-bold">{w.period}</td><td className="p-3 text-center"><button onClick={async () => { if(confirm('Xóa tuần?')){ await supabase.from('weeks').delete().eq('id', w.id); fetchAllData(); } }} className="text-red-600"><Trash2 className="h-4 w-4" /></button></td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {currentTab === 'results' && (
+          <div className="space-y-6">
+            <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 flex justify-between items-center">
+              <div className="flex items-center space-x-3">
+                <span className="text-xs font-bold">Chọn Tuần:</span>
+                <select value={selectedWeek} onChange={e => setSelectedWeek(e.target.value)} className="px-4 py-2 bg-purple-50 border rounded-xl font-bold text-purple-900 text-xs">
+                  {weeksList.map(w => (<option key={w.id} value={w.id}>{w.week_name} ({w.period})</option>))}
+                </select>
+              </div>
+              <button onClick={exportToExcel} className="bg-green-600 text-white font-bold px-6 py-2 rounded-xl text-xs"><FileSpreadsheet className="h-4 w-4 inline mr-1" />Xuất Excel</button>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {[1, 2, 3, 4].map(tNum => (
+                <div key={tNum} className="bg-white p-4 rounded-2xl border border-purple-100 shadow-sm flex flex-col items-center space-y-2">
+                  <h4 className="text-xs font-black text-purple-900 uppercase">Ảnh Tổ {tNum}</h4>
+                  {teamImages[tNum] ? (
+                    <div className="w-full space-y-1">
+                      <button onClick={() => { setZoom(1); setRotation(0); setPreviewImage(teamImages[tNum]); }} className="w-full bg-purple-50 text-purple-700 font-bold py-1.5 rounded-xl text-xs"><ImageIcon className="h-3.5 w-3.5 inline mr-1" />Xem</button>
+                      <button onClick={() => handleDeleteTeamImage(tNum)} className="w-full bg-red-50 text-red-600 font-bold py-1 rounded-xl text-xs">Xóa</button>
+                    </div>
+                  ) : (<span className="text-xs text-gray-400 italic">Chưa có ảnh</span>)}
+                </div>
+              ))}
+            </div>
+            <div className="bg-white rounded-3xl shadow-sm border border-gray-100 overflow-hidden">
+              <table className="w-full text-left">
+                <thead><tr className="bg-purple-50 text-purple-900 text-xs font-bold"><th className="p-4">STT</th><th className="p-4">Họ tên</th><th className="p-4">Tổ</th><th className="p-4">Điểm</th><th className="p-4">Xếp loại</th></tr></thead>
+                <tbody className="text-xs">
+                  {studentsList.map((st, i) => {
+                    const sc = scoresList.find(s => s.student_id === st.id && s.week_id === selectedWeek) || { score: 100, evaluation: 'T' }
+                    return (
+                      <tr key={st.id} className="border-b"><td className="p-4">{i+1}</td><td className="p-4 font-bold">{st.full_name}</td><td className="p-4">Tổ {st.team_number}</td><td className="p-4"><input type="number" value={sc.score} onChange={e => handleScoreUpdate(st.id, parseFloat(e.target.value) || 0)} className="w-20 px-2 py-1 bg-gray-50 border rounded font-bold text-center text-purple-700" /></td><td className="p-4 font-bold"><span className={`px-2 py-1 rounded text-xs ${sc.evaluation === 'T' ? 'bg-green-100 text-green-700' : sc.evaluation === 'K' ? 'bg-blue-100 text-blue-700' : sc.evaluation === 'TB' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{sc.evaluation}</span></td></tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {currentTab === 'periods' && (
+          <div className="space-y-6 bg-white p-6 rounded-3xl shadow-sm border border-gray-100">
+            <div className="flex items-center space-x-4">
+              <span className="text-xs font-bold">Chọn Đợt Thống Kê:</span>
+              <select value={selectedPeriod} onChange={e => setSelectedPeriod(e.target.value)} className="px-4 py-2 bg-purple-50 border rounded-xl font-bold text-purple-900 text-xs">
+                <option value="GIỮA HỌC KỲ 1">GIỮA HỌC KỲ 1</option><option value="HỌC KỲ 1">HỌC KỲ 1</option><option value="GIỮA HỌC KỲ 2">GIỮA HỌC KỲ 2</option><option value="HỌC KỲ 2">HỌC KỲ 2</option><option value="CẢ NĂM">CẢ NĂM</option>
+              </select>
+            </div>
+            <table className="w-full text-left">
+              <thead><tr className="bg-purple-50 text-purple-900 text-xs font-bold"><th className="p-3">STT</th><th className="p-3">Họ tên</th><th className="p-3">Tổ</th><th className="p-3">Chi tiết điểm các tuần</th><th className="p-3">Điểm TB</th><th className="p-3">Xếp loại</th></tr></thead>
+              <tbody className="text-xs">
+                {studentsList.map((st, i) => {
+                  const filteredWeeks = weeksList.filter(w => {
+                    const pUp = (w.period || '').toUpperCase(); const nUp = (w.week_name || '').toUpperCase();
+                    if (selectedPeriod === 'GIỮA HỌC KỲ 1') return pUp.includes('GIỮA HỌC KỲ 1') || nUp.includes('GIỮA HỌC KỲ 1');
+                    if (selectedPeriod === 'HỌC KỲ 1') return w.semester === 'HK1' || pUp.includes('HỌC KỲ 1') || nUp.includes('HỌC KỲ 1');
+                    if (selectedPeriod === 'GIỮA HỌC KỲ 2') return pUp.includes('GIỮA HỌC KỲ 2') || nUp.includes('GIỮA HỌC KỲ 2');
+                    if (selectedPeriod === 'HỌC KỲ 2') return w.semester === 'HK2' || pUp.includes('HỌC KỲ 2') || nUp.includes('HỌC KỲ 2');
+                    if (selectedPeriod === 'CẢ NĂM') return true;
+                    return false;
+                  });
+                  const weekIds = filteredWeeks.map(w => w.id)
+                  const studentScoresInPeriod = weeksList.map(w => {
+                    if (!weekIds.includes(w.id)) return null;
+                    const found = scoresList.find(s => s.student_id === st.id && s.week_id === w.id);
+                    return { weekName: w.week_name, score: found ? found.score : 100 };
+                  }).filter(Boolean) as { weekName: string; score: number }[];
+
+                  const avgScore = studentScoresInPeriod.length > 0 ? Math.round(studentScoresInPeriod.reduce((acc, curr) => acc + curr.score, 0) / studentScoresInPeriod.length) : 100
+                  const evalPeriod = getEvaluation(avgScore)
+
+                  return (
+                    <tr key={st.id} className="border-b"><td className="p-3">{i+1}</td><td className="p-3 font-bold">{st.full_name}</td><td className="p-3">Tổ {st.team_number}</td><td className="p-3 text-gray-600">{studentScoresInPeriod.map(item => `${item.weekName}: ${item.score}đ`).join(' | ')}</td><td className="p-3 font-bold text-purple-700">{avgScore} điểm</td><td className="p-3 font-bold"><span className={`px-2 py-1 rounded text-xs ${evalPeriod === 'T' ? 'bg-green-100 text-green-700' : evalPeriod === 'K' ? 'bg-blue-100 text-blue-700' : evalPeriod === 'TB' ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700'}`}>{evalPeriod}</span></td></tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {currentTab === 'saodo' && (
+          <div className="bg-white p-8 rounded-3xl shadow-sm border border-gray-100 text-center space-y-4">
+            <h3 className="text-lg font-black text-gray-900">Hệ Thống Tra Cứu Vi Phạm Sao Đỏ</h3>
+            <a href="https://thiduanamhoc2627.netlify.app/" target="_blank" rel="noopener noreferrer" className="inline-flex items-center space-x-2 bg-purple-600 text-white font-bold px-6 py-3 rounded-xl text-xs"><span>Mở trang tra cứu</span><ExternalLink className="h-4 w-4" /></a>
+          </div>
+        )}
+
+        {currentTab === 'teachers' && (
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4">
+            <h3 className="font-extrabold text-gray-900">Sổ Kỷ Luật GVBM</h3>
+            <div className="space-y-3">
+              {disciplinaryList.map(d => (
+                <div key={d.id} className="p-4 bg-gray-50 border rounded-2xl flex justify-between items-center">
+                  <div><p className="text-xs font-bold">{d.content}</p><p className="text-[11px] text-gray-500">GV: {d.teacher_name || 'Không rõ'}</p></div>
+                  <div className="flex items-center space-x-2">
+                    {d.image_url && (<button onClick={() => { setZoom(1); setRotation(0); setPreviewImage(d.image_url); }} className="text-purple-600 text-xs bg-purple-50 px-3 py-1.5 rounded-xl font-bold">Xem ảnh</button>)}
+                    <button onClick={() => handleDeleteDisciplinary(d.id)} className="text-red-600 p-2"><Trash2 className="h-4 w-4" /></button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {currentTab === 'settings' && (
+          <div className="bg-white p-6 rounded-3xl shadow-sm border border-gray-100 space-y-4 max-w-xl">
+            <h3 className="font-extrabold text-red-600">Làm Mới Dữ Liệu (Sang Năm Học Mới)</h3>
+            <p className="text-xs text-gray-500">Xóa sạch toàn bộ điểm số, ảnh cũ và mở khóa chọn lại lớp mới.</p>
+            <div className="space-y-3">
+              <input type="password" placeholder="Mật khẩu Admin (luuvanglien0410)" value={resetPasswordInput} onChange={e => setResetPasswordInput(e.target.value)} className="w-full px-4 py-3 bg-gray-50 border rounded-xl text-xs outline-none" />
+              <button onClick={handleResetSystem} className="w-full bg-red-600 text-white font-bold py-3 rounded-xl text-xs cursor-pointer">Xác Nhận Xóa Dữ Liệu Cũ</button>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {previewImage && (
+        <div className="fixed inset-0 bg-black/80 z-50 flex flex-col items-center justify-center p-4">
+          <div className="absolute top-4 right-4 flex space-x-3">
+            <button onClick={() => setZoom(z => z + 0.2)} className="bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs font-bold">Phóng to (+)</button>
+            <button onClick={() => setZoom(z => Math.max(0.4, z - 0.2))} className="bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs font-bold">Thu nhỏ (-)</button>
+            <button onClick={() => setRotation(r => (r + 90) % 360)} className="bg-white/20 text-white px-3 py-1.5 rounded-xl text-xs font-bold">Xoay</button>
+            <button onClick={() => setPreviewImage(null)} className="bg-red-600 text-white px-4 py-1.5 rounded-xl text-xs font-bold">Đóng</button>
+          </div>
+          <div className="overflow-auto max-w-full max-h-[85vh] flex items-center justify-center p-2">
+            <img src={previewImage} alt="Xem chi tiết" style={{ transform: `scale(${zoom}) rotate(${rotation}deg)`, transition: 'transform 0.2s ease' }} className="max-h-[80vh] object-contain rounded-lg shadow-2xl" />
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
