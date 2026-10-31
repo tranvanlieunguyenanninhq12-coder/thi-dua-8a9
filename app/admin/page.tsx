@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { ShieldAlert, Users, Calendar, Award, BarChart3, Settings, LogOut, Trash2, FileSpreadsheet, ExternalLink, ImageIcon, BookOpen, Home, RefreshCw, Plus, CheckCircle2, Upload } from 'lucide-react'
+import { ShieldAlert, Users, Calendar, Award, BarChart3, Settings, LogOut, Trash2, FileSpreadsheet, ExternalLink, ImageIcon, BookOpen, Home, RefreshCw, Plus, CheckCircle2, Upload, AlertOctagon } from 'lucide-react'
 import * as XLSX from 'xlsx'
 
 export default function AdminDashboard() {
@@ -61,7 +61,7 @@ export default function AdminDashboard() {
     const { data: users } = await supabase.from('users').select('*')
     if (users) setUsersList(users)
 
-    // ĐÃ SỬA: Sắp xếp danh sách học sinh theo thời gian tạo (created_at) thay vì tên (full_name) để khớp với Excel
+    // Sắp xếp danh sách học sinh theo thời gian tạo để chuẩn khớp với Excel
     const { data: students } = await supabase.from('students').select('*').eq('class_name', clsToFetch).order('created_at', { ascending: true })
     if (students) setStudentsList(students)
 
@@ -149,6 +149,22 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (confirm('Xóa học sinh này?')) { await supabase.from('students').delete().eq('id', id); fetchAllData(); }
   }
 
+  // TÍNH NĂNG MỚI: Xóa toàn bộ học sinh trong lớp
+  const handleDeleteAllStudents = async () => {
+    const userInput = prompt(`CẢNH BÁO NGUY HIỂM: \nHành động này sẽ XÓA TOÀN BỘ danh sách học sinh lớp ${TEN_LOP_CO_DINH} cùng toàn bộ điểm số của họ. \n\nĐể xác nhận, vui lòng gõ đúng chữ: XOA`);
+    if (userInput === 'XOA') {
+      // 1. Xóa toàn bộ điểm số trước để tránh lỗi khóa ngoại (nếu có)
+      await supabase.from('emulation_scores').delete().neq('id', '00000000-0000-0000-0000-000000000000')
+      // 2. Xóa học sinh
+      await supabase.from('students').delete().eq('class_name', TEN_LOP_CO_DINH)
+      
+      alert('Đã xóa sạch danh sách học sinh!');
+      fetchAllData();
+    } else if (userInput !== null) {
+      alert('Bạn gõ chưa đúng chữ "XOA". Hủy lệnh.');
+    }
+  }
+
   const handleAddWeek = async (e: React.FormEvent) => {
     e.preventDefault()
     const { error } = await supabase.from('weeks').insert([{ week_name: newWeekName, semester: newWeekSemester, period: newWeekPeriod }])
@@ -210,8 +226,7 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
       router.push('/')
     }
   }
-
-  return (
+return (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-indigo-50 flex flex-col font-sans selection:bg-pink-200">
       <header className="bg-white/70 backdrop-blur-xl border-b border-white/50 px-6 py-4 flex justify-between items-center shadow-[0_4px_30px_rgba(0,0,0,0.03)] sticky top-0 z-40">
         <div className="flex items-center space-x-3.5">
@@ -306,14 +321,14 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
 
         {currentTab === 'students' && currentUser?.role === 'admin' && (
           <div className="bg-white/70 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white space-y-8">
-            <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">Thêm học sinh lớp {TEN_LOP_CO_DINH}</h3>
+            <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">Quản lý Học sinh lớp {TEN_LOP_CO_DINH}</h3>
             
             <form onSubmit={handleAddStudent} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
-              <input type="text" placeholder="Nhập Họ Tên HS thủ công..." value={newStudentName} onChange={e => setNewStudentName(e.target.value)} required className="md:col-span-6 px-5 py-3.5 bg-white/80 border border-purple-100 rounded-full text-xs font-bold outline-none focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner" />
+              <input type="text" placeholder="Nhập Họ Tên HS thủ công..." value={newStudentName} onChange={e => setNewStudentName(e.target.value)} required className="md:col-span-5 px-5 py-3.5 bg-white/80 border border-purple-100 rounded-full text-xs font-bold outline-none focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner" />
               <select value={newStudentTeam} onChange={e => setNewStudentTeam(parseInt(e.target.value))} className="md:col-span-2 px-5 py-3.5 bg-white/80 border border-purple-100 rounded-full text-xs font-bold outline-none cursor-pointer focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner text-slate-700">
                 <option value={1}>Tổ 1</option><option value={2}>Tổ 2</option><option value={3}>Tổ 3</option><option value={4}>Tổ 4</option>
               </select>
-              <div className="md:col-span-4 flex space-x-2">
+              <div className="md:col-span-5 flex space-x-2">
                 <button type="submit" className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-extrabold px-3 py-3.5 rounded-full shadow-lg shadow-indigo-200 transition transform hover:-translate-y-1 cursor-pointer flex items-center justify-center text-xs">
                   <Plus className="h-4 w-4 mr-1.5"/>Thêm
                 </button>
@@ -321,6 +336,9 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                   <Upload className="h-4 w-4 mr-1.5"/> Excel
                   <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
                 </label>
+                <button type="button" onClick={handleDeleteAllStudents} className="flex-1 bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white font-extrabold px-3 py-3.5 rounded-full shadow-lg shadow-rose-200 transition transform hover:-translate-y-1 cursor-pointer flex items-center justify-center text-xs">
+                  <AlertOctagon className="h-4 w-4 mr-1.5"/>Xóa tất cả
+                </button>
               </div>
             </form>
             
@@ -336,6 +354,9 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
                       <td className="p-5 text-center pr-8"><button onClick={() => handleDeleteStudent(st.id)} className="text-rose-400 hover:text-white hover:bg-rose-500 p-2.5 rounded-full transition-all cursor-pointer shadow-sm"><Trash2 className="h-4 w-4 mx-auto" /></button></td>
                     </tr>
                   ))}
+                  {studentsList.length === 0 && (
+                    <tr><td colSpan={4} className="p-8 text-center text-slate-400 font-bold text-sm">Chưa có học sinh nào. Hãy tải file Excel hoặc thêm thủ công.</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -369,7 +390,8 @@ const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
             </div>
           </div>
         )}
-{currentTab === 'results' && (
+
+        {currentTab === 'results' && (
           <div className="space-y-6">
             <div className="bg-white/70 backdrop-blur-xl p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="flex items-center space-x-4 w-full md:w-auto">
