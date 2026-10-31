@@ -61,7 +61,8 @@ export default function AdminDashboard() {
     const { data: users } = await supabase.from('users').select('*')
     if (users) setUsersList(users)
 
-    const { data: students } = await supabase.from('students').select('*').eq('class_name', clsToFetch).order('full_name', { ascending: true })
+    // ĐÃ SỬA: Sắp xếp danh sách học sinh theo thời gian tạo (created_at) thay vì tên (full_name) để khớp với Excel
+    const { data: students } = await supabase.from('students').select('*').eq('class_name', clsToFetch).order('created_at', { ascending: true })
     if (students) setStudentsList(students)
 
     const { data: weeks } = await supabase.from('weeks').select('*')
@@ -109,8 +110,7 @@ export default function AdminDashboard() {
     }])
     if (error) alert('Lỗi thêm học sinh!'); else { alert('Thêm thành công!'); setNewStudentName(''); fetchAllData(); }
   }
-
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
@@ -158,7 +158,8 @@ export default function AdminDashboard() {
   const getEvaluation = (score: number) => {
     if (score < 50) return 'Y'; if (score <= 64) return 'TB'; if (score <= 79) return 'K'; return 'T';
   }
-const handleScoreUpdate = async (studentId: string, scoreVal: number) => {
+  
+  const handleScoreUpdate = async (studentId: string, scoreVal: number) => {
     const evalVal = getEvaluation(scoreVal)
     const existing = scoresList.find(s => s.student_id === studentId && s.week_id === selectedWeek)
     
@@ -302,7 +303,8 @@ const handleScoreUpdate = async (studentId: string, scoreVal: number) => {
             </div>
           </div>
         )}
-{currentTab === 'students' && currentUser?.role === 'admin' && (
+
+        {currentTab === 'students' && currentUser?.role === 'admin' && (
           <div className="bg-white/70 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white space-y-8">
             <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">Thêm học sinh lớp {TEN_LOP_CO_DINH}</h3>
             
@@ -367,8 +369,7 @@ const handleScoreUpdate = async (studentId: string, scoreVal: number) => {
             </div>
           </div>
         )}
-
-        {currentTab === 'results' && (
+{currentTab === 'results' && (
           <div className="space-y-6">
             <div className="bg-white/70 backdrop-blur-xl p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="flex items-center space-x-4 w-full md:w-auto">
