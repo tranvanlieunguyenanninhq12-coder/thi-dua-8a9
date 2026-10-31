@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/utils/supabase/client'
-import { ShieldAlert, Users, Calendar, Award, BarChart3, Settings, LogOut, Trash2, FileSpreadsheet, ExternalLink, ImageIcon, BookOpen, Home, RefreshCw, Plus, CheckCircle2 } from 'lucide-react'
+import { ShieldAlert, Users, Calendar, Award, BarChart3, Settings, LogOut, Trash2, FileSpreadsheet, ExternalLink, ImageIcon, BookOpen, Home, RefreshCw, Plus, CheckCircle2, Upload } from 'lucide-react'
+import * as XLSX from 'xlsx'
 
 export default function AdminDashboard() {
   const TEN_LOP_CO_DINH = '8A9'
@@ -21,7 +22,6 @@ export default function AdminDashboard() {
   const [selectedClass, setSelectedClass] = useState(TEN_LOP_CO_DINH)
   const [studentsList, setStudentsList] = useState<any[]>([])
   const [newStudentName, setNewStudentName] = useState('')
-  const [newStudentCode, setNewStudentCode] = useState('')
   const [newStudentTeam, setNewStudentTeam] = useState(1)
 
   const [weeksList, setWeeksList] = useState<any[]>([])
@@ -76,12 +76,8 @@ export default function AdminDashboard() {
     const currentWId = selectedWeek || (weeks && weeks.length > 0 ? weeks[0].id : '')
     if (currentWId) {
       const { data: imgData, error } = await supabase.from('team_weekly_images').select('*').eq('week_id', currentWId)
-      if (error) { console.error("Lỗi tải ảnh:", error); }
-      if (imgData && imgData.length > 0) {
-        setTeamImages(imgData)
-      } else {
-        setTeamImages([])
-      }
+      if (imgData && imgData.length > 0) setTeamImages(imgData)
+      else setTeamImages([])
     }
 
     const { data: disc } = await supabase.from('disciplinary_records').select('*').order('created_at', { ascending: false })
@@ -109,9 +105,44 @@ export default function AdminDashboard() {
   const handleAddStudent = async (e: React.FormEvent) => {
     e.preventDefault()
     const { error } = await supabase.from('students').insert([{ 
-      student_code: newStudentCode, full_name: newStudentName, class_name: TEN_LOP_CO_DINH, team_number: newStudentTeam 
+      student_code: `HS_${Date.now()}`, full_name: newStudentName, class_name: TEN_LOP_CO_DINH, team_number: newStudentTeam 
     }])
-    if (error) alert('Lỗi thêm học sinh!'); else { alert('Thêm thành công!'); setNewStudentName(''); setNewStudentCode(''); fetchAllData(); }
+    if (error) alert('Lỗi thêm học sinh!'); else { alert('Thêm thành công!'); setNewStudentName(''); fetchAllData(); }
+  }
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = async (evt) => {
+      try {
+        const buffer = evt.target?.result
+        const wb = XLSX.read(buffer, { type: 'array' })
+        const wsname = wb.SheetNames[0]
+        const ws = wb.Sheets[wsname]
+        const data = XLSX.utils.sheet_to_json(ws, { header: 1 })
+        
+        // Bỏ qua dòng tiêu đề (dòng 1), chỉ lấy dữ liệu
+        const rows = data.slice(1).filter((row: any) => row[1]) // row[1] là Họ Tên
+        const newStudents = rows.map((row: any, index) => {
+          const teamStr = String(row[2] || '1').replace(/\D/g, '') // Tách số từ chữ "Tổ 1"
+          const teamNum = parseInt(teamStr) || 1
+          return {
+            full_name: String(row[1]).trim(),
+            team_number: teamNum,
+            class_name: TEN_LOP_CO_DINH,
+            student_code: `HS_${Date.now()}_${index}`
+          }
+        })
+        if (newStudents.length > 0) {
+          const { error } = await supabase.from('students').insert(newStudents)
+          if (error) alert('Lỗi cơ sở dữ liệu: ' + error.message)
+          else { alert(`Đã nhập thành công ${newStudents.length} học sinh từ Excel!`); fetchAllData(); }
+        } else { alert('Không tìm thấy dữ liệu hợp lệ trong file Excel!') }
+      } catch (error) { alert('Đã xảy ra lỗi khi đọc file Excel!') }
+    }
+    reader.readAsArrayBuffer(file)
+    e.target.value = '' // Reset input
   }
 
   const handleDeleteStudent = async (id: string) => {
@@ -127,8 +158,7 @@ export default function AdminDashboard() {
   const getEvaluation = (score: number) => {
     if (score < 50) return 'Y'; if (score <= 64) return 'TB'; if (score <= 79) return 'K'; return 'T';
   }
-
-  const handleScoreUpdate = async (studentId: string, scoreVal: number) => {
+const handleScoreUpdate = async (studentId: string, scoreVal: number) => {
     const evalVal = getEvaluation(scoreVal)
     const existing = scoresList.find(s => s.student_id === studentId && s.week_id === selectedWeek)
     
@@ -151,7 +181,8 @@ export default function AdminDashboard() {
     await supabase.from('disciplinary_records').delete().eq('id', id)
     fetchAllData()
   }
-const exportToExcel = () => {
+
+  const exportToExcel = () => {
     let csv = "STT,Họ và Tên,Tổ,Tổng Điểm,Xếp Loại\n"
     studentsList.forEach((st, idx) => {
       const sc = scoresList.find(s => s.student_id === st.id && s.week_id === selectedWeek) || { score: 100, evaluation: 'T' }
@@ -239,7 +270,8 @@ const exportToExcel = () => {
             })}
           </div>
         )}
-{currentTab === 'accounts' && currentUser?.role === 'admin' && (
+
+        {currentTab === 'accounts' && currentUser?.role === 'admin' && (
           <div className="bg-white/70 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white space-y-8">
             <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">Cấp tài khoản mới</h3>
             <form onSubmit={handleAddUser} className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -270,26 +302,37 @@ const exportToExcel = () => {
             </div>
           </div>
         )}
-
-        {currentTab === 'students' && currentUser?.role === 'admin' && (
+{currentTab === 'students' && currentUser?.role === 'admin' && (
           <div className="bg-white/70 backdrop-blur-xl p-8 rounded-[2.5rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white space-y-8">
             <h3 className="text-xl font-extrabold text-slate-800 tracking-tight">Thêm học sinh lớp {TEN_LOP_CO_DINH}</h3>
-            <form onSubmit={handleAddStudent} className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <input type="text" placeholder="Mã HS" value={newStudentCode} onChange={e => setNewStudentCode(e.target.value)} required className="px-5 py-3.5 bg-white/80 border border-purple-100 rounded-full text-xs font-bold outline-none focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner" />
-              <input type="text" placeholder="Họ tên HS" value={newStudentName} onChange={e => setNewStudentName(e.target.value)} required className="px-5 py-3.5 bg-white/80 border border-purple-100 rounded-full text-xs font-bold outline-none focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner" />
-              <select value={newStudentTeam} onChange={e => setNewStudentTeam(parseInt(e.target.value))} className="px-5 py-3.5 bg-white/80 border border-purple-100 rounded-full text-xs font-bold outline-none cursor-pointer focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner text-slate-700">
+            
+            <form onSubmit={handleAddStudent} className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+              <input type="text" placeholder="Nhập Họ Tên HS thủ công..." value={newStudentName} onChange={e => setNewStudentName(e.target.value)} required className="md:col-span-6 px-5 py-3.5 bg-white/80 border border-purple-100 rounded-full text-xs font-bold outline-none focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner" />
+              <select value={newStudentTeam} onChange={e => setNewStudentTeam(parseInt(e.target.value))} className="md:col-span-2 px-5 py-3.5 bg-white/80 border border-purple-100 rounded-full text-xs font-bold outline-none cursor-pointer focus:ring-4 focus:ring-purple-500/20 transition-all shadow-inner text-slate-700">
                 <option value={1}>Tổ 1</option><option value={2}>Tổ 2</option><option value={3}>Tổ 3</option><option value={4}>Tổ 4</option>
               </select>
-              <button type="submit" className="bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-extrabold px-6 py-3.5 rounded-full shadow-lg shadow-indigo-200 transition transform hover:-translate-y-1 cursor-pointer flex items-center justify-center">
-                <Plus className="h-4 w-4 mr-1.5"/>Thêm HS
-              </button>
+              <div className="md:col-span-4 flex space-x-2">
+                <button type="submit" className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white font-extrabold px-3 py-3.5 rounded-full shadow-lg shadow-indigo-200 transition transform hover:-translate-y-1 cursor-pointer flex items-center justify-center text-xs">
+                  <Plus className="h-4 w-4 mr-1.5"/>Thêm
+                </button>
+                <label className="flex-1 bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-extrabold px-3 py-3.5 rounded-full shadow-lg shadow-teal-200 transition transform hover:-translate-y-1 cursor-pointer flex items-center justify-center text-xs text-center">
+                  <Upload className="h-4 w-4 mr-1.5"/> Excel
+                  <input type="file" accept=".xlsx, .xls" onChange={handleFileUpload} className="hidden" />
+                </label>
+              </div>
             </form>
+            
             <div className="overflow-hidden rounded-[2rem] border border-purple-100 bg-white/50 backdrop-blur-sm shadow-sm mt-6">
               <table className="w-full text-left border-collapse">
-                <thead><tr className="bg-purple-100/50 text-purple-800 text-xs font-extrabold tracking-wide"><th className="p-5 pl-8">STT</th><th className="p-5">Mã HS</th><th className="p-5">Họ tên</th><th className="p-5">Tổ</th><th className="p-5 text-center pr-8">Xóa</th></tr></thead>
+                <thead><tr className="bg-purple-100/50 text-purple-800 text-xs font-extrabold tracking-wide"><th className="p-5 pl-8 w-24">STT</th><th className="p-5">Họ tên</th><th className="p-5">Tổ</th><th className="p-5 text-center pr-8 w-24">Xóa</th></tr></thead>
                 <tbody className="divide-y divide-purple-50 text-xs font-medium text-slate-700">
                   {studentsList.map((st, i) => (
-                    <tr key={st.id} className="hover:bg-white/80 transition-colors"><td className="p-5 pl-8 font-bold text-slate-500">{i+1}</td><td className="p-5 font-extrabold text-indigo-600">{st.student_code}</td><td className="p-5 font-bold text-slate-800">{st.full_name}</td><td className="p-5 font-semibold text-pink-600">Tổ {st.team_number}</td><td className="p-5 text-center pr-8"><button onClick={() => handleDeleteStudent(st.id)} className="text-rose-400 hover:text-white hover:bg-rose-500 p-2.5 rounded-full transition-all cursor-pointer shadow-sm"><Trash2 className="h-4 w-4 mx-auto" /></button></td></tr>
+                    <tr key={st.id} className="hover:bg-white/80 transition-colors">
+                      <td className="p-5 pl-8 font-bold text-slate-500">{i+1}</td>
+                      <td className="p-5 font-bold text-slate-800">{st.full_name}</td>
+                      <td className="p-5 font-semibold text-pink-600">Tổ {st.team_number}</td>
+                      <td className="p-5 text-center pr-8"><button onClick={() => handleDeleteStudent(st.id)} className="text-rose-400 hover:text-white hover:bg-rose-500 p-2.5 rounded-full transition-all cursor-pointer shadow-sm"><Trash2 className="h-4 w-4 mx-auto" /></button></td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -324,7 +367,8 @@ const exportToExcel = () => {
             </div>
           </div>
         )}
-{currentTab === 'results' && (
+
+        {currentTab === 'results' && (
           <div className="space-y-6">
             <div className="bg-white/70 backdrop-blur-xl p-6 rounded-[2rem] shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-white flex flex-col md:flex-row justify-between items-center gap-4">
               <div className="flex items-center space-x-4 w-full md:w-auto">
